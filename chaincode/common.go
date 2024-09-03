@@ -68,18 +68,20 @@ type Group struct {
 
 type ACLEntry struct {
     ID              string      `json:"id"`
+    Entity          string      `json:"entity,omitempty"`
     EntryType       uint32      `json:"enttype"`
     Permissions     uint32      `json:"bits"`
 }
+
+type ACL []ACLEntry
 
 type ACLTemplate struct {
     Type            string      `json:"type"`
     ID              string      `json:"id"`
     Owner           string      `json:"owner"`
-    Permissions     []ACLEntry  `json:"perms"`
+    Name            string      `json:"name"`
+    Permissions     ACL         `json:"perms"`
 }
-
-type ACL []ACLEntry
 
 func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) error {
     err := s.initusers(ctx)
