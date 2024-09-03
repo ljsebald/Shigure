@@ -337,24 +337,14 @@ func (s *SmartContract) DeleteMyACL(ctx contractapi.TransactionContextInterface,
     return true, nil
 }
 
-func (s *SmartContract) DeleteACL(ctx contractapi.TransactionContextInterface,
-                                  id string) (bool, error) {
+func (s *SmartContract) DeleteACLByID(ctx contractapi.TransactionContextInterface,
+                                      id string) (bool, error) {
     myuser, err := s.GetMyUser(ctx)
     if err != nil {
         return false, err
     }
 
-    stateid, _ := ctx.GetStub().CreateCompositeKey("ACL", []string{id})
-    aclJSON, err := ctx.GetStub().GetState(stateid)
-
-    if err != nil {
-        return false, fmt.Errorf("failed to read from world state: %v", err)
-    } else if aclJSON == nil {
-        return false, fmt.Errorf("unknown acl")
-    }
-
-    var acl ACLTemplate
-    err = json.Unmarshal(aclJSON, &acl)
+    acl, err := s.GetACLByID(ctx, id)
     if err != nil {
         return false, err
     }
@@ -364,6 +354,7 @@ func (s *SmartContract) DeleteACL(ctx contractapi.TransactionContextInterface,
         return false, fmt.Errorf("permission denied")
     }
 
+    stateid, _ := ctx.GetStub().CreateCompositeKey("ACL", []string{id})
     err = ctx.GetStub().DelState(stateid)
     if err != nil {
         return false, err
