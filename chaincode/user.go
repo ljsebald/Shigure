@@ -338,6 +338,9 @@ func (s *SmartContract) gatheruperms(ctx contractapi.TransactionContextInterface
     var parent *User = nil
     var lastperms uint32 = 0x000000ff
 
+    // The user has full permissions for anything they have direct access to.
+    rv[user.ID] = lastperms
+
     // Iterate up the tree of parents until we either run out of permissions or
     // get all the way to the root
     for u := user; u.Parent != "" && lastperms != 0; u = parent {

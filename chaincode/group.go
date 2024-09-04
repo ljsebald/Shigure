@@ -581,3 +581,90 @@ func (s *SmartContract) gathergperms(ctx contractapi.TransactionContextInterface
     return rv, nil
 }
 
+// Gather all group permissions for a given user and all the groups they are in
+func (s *SmartContract) GatherGroupPermsForUser(ctx contractapi.TransactionContextInterface,
+                                                uid string,
+                                                bucket string) (map[string]uint32, error) {
+    // Fetch the user's groups
+    groups, err := s.GetMemberGroupsForUID(ctx, uid)
+    if err != nil {
+        return nil, err
+    }
+
+
+    return s.gatherallgperms(ctx, groups, bucket)
+}
+
+func (s *SmartContract) GatherGroupPermsForUserByID(ctx contractapi.TransactionContextInterface,
+                                                    id string,
+                                                    bucket string) (map[string]uint32, error) {
+    // Fetch the user's groups
+    groups, err := s.getusergroups(ctx, id)
+    if err != nil {
+        return nil, err
+    }
+
+
+    return s.gatherallgperms(ctx, groups, bucket)
+}
+
+func (s *SmartContract) gatherallgperms(ctx contractapi.TransactionContextInterface,
+                                        groups []*Group,
+                                        bucket string) (map[string]uint32, error) {
+    rv := map[string]uint32{}
+    var parent *Group = nil
+    var lastperms uint32 = 0x000000ff
+
+    // Run through each group in the array...
+    for _, group := range groups {
+        // Full permissions are given for any group the user is directly in, so
+        // add that in first.
+        lastperms = 0x000000ff
+        rv[group.ID] = lastperms
+
+        // Iterate up the tree of parents until we either run out of permissions
+        // or get all the way to the root
+        for g := group; g.Parent != "" && lastperms != 0; g = parent {
+            // Grab the parent.
+            parent, err := s.GetGroupByID(ctx, g.Parent)
+            if err != nil {
+                return nil, err
+            } else if parent == nil {
+                return nil, fmt.Errorf("unknown group in hierarchy")
+            }
+
+            // Find our entry in the subgroups
+            for _, ent := range parent.SubGroups {
+                if ent.ID == g.ID {
+                    // Look for the bucket in question
+                    perms, ok := ent.Perms[bucket]
+                    if !ok || perms == 0 {
+                        // If we didn't match the bucket, see if we have a
+                        // wildcard match. Specific matches always override
+                        //wildcard ones.
+                        perms, ok = ent.Perms["*"]
+
+                        if !ok || perms == 0 {
+                            // We don't have anything further to do up this path
+                            // since we don't have either a specific or wildcard
+                            // match
+                            break
+                        }
+                    }
+
+                    // Apply the permissions we have here to what we've gotten
+                    // so far... Record it if we've got something left and it is
+                    // more permission than we currently have on this bucket.
+                    lastperms &= perms
+                    if lastperms != 0  && lastperms > rv[parent.ID] {
+                        rv[parent.ID] = lastperms
+                    }
+                }
+            }
+        }
+    }
+
+    // We've finished with every group the user is in, so... we're done.
+    return rv, nil
+}
+
