@@ -67,20 +67,20 @@ type Group struct {
 // 1 = Group
 
 type ACLEntry struct {
-    ID              string      `json:"id"`
-    Entity          string      `json:"entity,omitempty"`
-    EntryType       uint32      `json:"enttype"`
-    Permissions     uint32      `json:"bits"`
+    ID              string              `json:"id"`
+    Entity          string              `json:"entity,omitempty"`
+    EntryType       uint32              `json:"enttype"`
+    Permissions     uint32              `json:"bits"`
 }
 
 type ACL []ACLEntry
 
 type ACLTemplate struct {
-    Type            string      `json:"type"`
-    ID              string      `json:"id"`
-    Owner           string      `json:"owner"`
-    Name            string      `json:"name"`
-    Permissions     ACL         `json:"perms"`
+    Type            string              `json:"type"`
+    ID              string              `json:"id"`
+    Owner           string              `json:"owner"`
+    Name            string              `json:"name"`
+    Permissions     ACL                 `json:"perms"`
 }
 
 func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) error {
@@ -89,6 +89,11 @@ func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) 
         return err
     }
 
-    return s.initgroups(ctx)
+    err = s.initgroups(ctx)
+    if err != nil {
+        return err
+    }
+
+    return s.initacls(ctx)
 }
 

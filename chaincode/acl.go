@@ -12,6 +12,10 @@ import (
     "github.com/google/uuid"
 )
 
+func (s *SmartContract) initacls(ctx contractapi.TransactionContextInterface) error {
+    return nil
+}
+
 func (s *SmartContract) GetACLByID(ctx contractapi.TransactionContextInterface,
                                    id string) (*ACLTemplate, error) {
     stateid, _ := ctx.GetStub().CreateCompositeKey("ACL", []string{id})
