@@ -142,3 +142,41 @@ func (s *SmartContract) RemoveBucket(ctx contractapi.TransactionContextInterface
     return "true", nil
 }
 
+func (s *SmartContract) SetBucketACLFromTemplate(ctx contractapi.TransactionContextInterface,
+                                                 bktname string,
+                                                 aclname string) (bool, error) {
+    myuser, err := s.GetMyUser(ctx)
+    if err != nil {
+        return false, err
+    }
+
+    bkt, err := s.GetBucket(ctx, bktname)
+    if err != nil {
+        return false, err
+    }
+
+    if bkt.Owner != myuser.ID {
+        return false, fmt.Errorf("permission denied")
+    }
+
+    tacl, err := s.GetMyACLByName(ctx, aclname)
+    if err != nil {
+        return false, err
+    }
+
+    // Update the state in the db
+    bkt.Permissions = templatetoacl(tacl)
+    bktJSON, err := json.Marshal(bkt)
+    if err != nil {
+        return false, err
+    }
+
+    stateid, _ := ctx.GetStub().CreateCompositeKey("Bucket", []string{bktname})
+    err = ctx.GetStub().PutState(stateid, bktJSON)
+    if err != nil {
+        return false, fmt.Errorf("failed to put to world state. %v", err)
+    }
+
+    return true, nil
+}
+
