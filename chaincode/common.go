@@ -16,6 +16,7 @@ type SmartContract struct {
 // 0x01 = add users
 // 0x02 = add subusers of self
 // 0x04 = add groups (and subgroups)
+// 0x08 = add buckets
 
 // Bucket perms (ACLs are similar):
 // 0x01 = list objects (and read metadata)
@@ -95,6 +96,13 @@ type ACLTest struct {
     AccessType      uint32              `json:"access"`
 }
 
+type Bucket struct {
+    Type            string              `json:"type"`
+    Name            string              `json:"name"`
+    Owner           string              `json:"owner"`
+    Permissions     ACL                 `json:"perms"`
+}
+
 func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) error {
     err := s.initusers(ctx)
     if err != nil {
@@ -106,6 +114,16 @@ func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) 
         return err
     }
 
-    return s.initacls(ctx)
+    err = s.initacls(ctx)
+    if err != nil {
+        return err
+    }
+
+    err = s.initbuckets(ctx)
+    if err != nil {
+        return err
+    }
+
+    return nil
 }
 
