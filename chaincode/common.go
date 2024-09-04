@@ -83,6 +83,18 @@ type ACLTemplate struct {
     Permissions     ACL                 `json:"perms"`
 }
 
+// AccessType:
+// 0 = Read
+// 1 = Create
+// 2 = Overwrite
+// 3 = Delete
+
+type ACLTest struct {
+    UID             string              `json:"uid"`
+    Bucket          string              `json:"bucket"`
+    AccessType      uint32              `json:"access"`
+}
+
 func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) error {
     err := s.initusers(ctx)
     if err != nil {

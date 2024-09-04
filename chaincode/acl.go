@@ -441,3 +441,69 @@ func (s *SmartContract) GetAllMyACLs(ctx contractapi.TransactionContextInterface
     return acls, nil
 }
 
+var access_to_bits = [...]uint32 { 0x02, 0x04, 0x08, 0x10 }
+
+func (s *SmartContract) testaclaccess(ctx contractapi.TransactionContextInterface,
+                                      acl ACL, uid string, bucket string,
+                                      access uint32) bool {
+    if access > uint32(len(access_to_bits)) {
+        return false
+    }
+
+    user, _ := s.GetUserByUID(ctx, uid)
+    if user == nil {
+        return false
+    }
+
+    iuser, _ := s.gatheruperms(ctx, user, bucket)
+    if iuser == nil {
+        return false
+    }
+
+    groups, err := s.GatherGroupPermsForUserByID(ctx, user.ID, bucket)
+    if err != nil {
+        return false
+    }
+
+    // Run through each entry in the ACL, testing each one that might
+    // potentially give us the access requested.
+    for _, ent := range acl {
+        // Don't bother looking at ACL entries that don't have enough permission
+        if (access_to_bits[access] & ent.Permissions) == 0 {
+            continue
+        }
+
+        if ent.EntryType == 0 {
+            // The iuser map includes both direct and inherited permissions.
+            p := iuser[ent.ID]
+            if (p & ent.Permissions) != 0 {
+                return true
+            }
+        } else if ent.EntryType == 1 {
+            // The groups map includes both direct and inherited permissions.
+            p := groups[ent.ID]
+            if (p & ent.Permissions) != 0 {
+                return true
+            }
+        }
+    }
+
+    return false
+}
+
+func (s *SmartContract) TestMyACL(ctx contractapi.TransactionContextInterface,
+                                  name string, tests []ACLTest) ([]bool, error) {
+    acl, err := s.GetMyACLByName(ctx, name)
+    if err != nil {
+        return nil, err
+    }
+
+    rvs := make([]bool, len(tests))
+    for i, ent := range tests {
+        rvs[i] = s.testaclaccess(ctx, acl.Permissions, ent.UID, ent.Bucket,
+                                 ent.AccessType)
+    }
+
+    return rvs, nil
+}
+
