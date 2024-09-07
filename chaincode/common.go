@@ -103,6 +103,38 @@ type Bucket struct {
     Permissions     ACL                 `json:"perms"`
 }
 
+// Object Flags:
+// 0x01 = Index only file (no data blocks)
+
+type Object struct {
+    Type            string              `json:"type"`
+    Bucket          string              `json:"bucket"`
+    Key             string              `json:"key"`
+    Owner           string              `json:"owner"`
+    Permissions     ACL                 `json:"perms"`
+    MD5Sum          [16]byte            `json:"md5sum"`
+    Size            uint64              `json:"size"`
+    CTime           int64               `json:"ctime"`
+    Metadata        map[string]string   `json:"metadata"`
+    Flags           uint64              `json:"flags"`
+}
+
+type DeleteRecord struct {
+    Type            string              `json:"type"`
+    ID              string              `json:"id"`
+    Bucket          string              `json:"bucket"`
+    Key             string              `json:"key"`
+    Owner           string              `json:"owner"`
+    Deleter         string              `json:"deleter"`
+    Permissions     ACL                 `json:"perms"`
+    MD5Sum          [16]byte            `json:"md5sum"`
+    Size            uint64              `json:"size"`
+    CTime           int64               `json:"ctime"`
+    DTime           int64               `json:"dtime"`
+    Metadata        map[string]string   `json:"metadata"`
+    Flags           uint64              `json:"flags"`
+}
+
 func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) error {
     err := s.initusers(ctx)
     if err != nil {
@@ -124,6 +156,6 @@ func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) 
         return err
     }
 
-    return nil
+    return s.initobjects(ctx)
 }
 
