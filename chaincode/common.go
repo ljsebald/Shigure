@@ -96,6 +96,7 @@ type Bucket struct {
     Owner           string              `json:"owner"`
     Permissions     ACL                 `json:"perms"`
     Metadata        map[string]string   `json:"metadata"`
+    CTime           int64               `json:"ctime"`
 }
 
 // Object Flags:
@@ -148,6 +149,19 @@ type ObjectListing struct {
     Count           uint64              `json:"count"`
     Token           string              `json:"token"`
     Objects         []ListingObject     `json:"objects"`
+}
+
+type BucketListing struct {
+    Count           uint64              `json:"count"`
+    Token           string              `json:"token"`
+    Buckets         []ListingBucket     `json:"buckets"`
+}
+
+type ListingBucket struct {
+    Name            string              `json:"name"`
+    Owner           string              `json:"owner"`
+    CTime           int64               `json:"ctime"`
+    Metadata        map[string]string   `json:"metadata"`
 }
 
 func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) error {

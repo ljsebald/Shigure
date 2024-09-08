@@ -7,6 +7,8 @@ package chaincode
 import (
     "encoding/json"
     "fmt"
+    "strings"
+    "time"
 
     "github.com/hyperledger/fabric-contract-api-go/v2/contractapi"
 )
@@ -103,6 +105,7 @@ func (s *SmartContract) AddBucket(ctx contractapi.TransactionContextInterface,
         Name:       name,
         Owner:      myuser.ID,
         Metadata:   metadata,
+        CTime:      time.Now().Unix(),
     }
 
     bktJSON, err := json.Marshal(bucket)
@@ -187,5 +190,91 @@ func (s *SmartContract) SetBucketACLFromTemplate(ctx contractapi.TransactionCont
     }
 
     return true, nil
+}
+
+func (s *SmartContract) QueryMyBuckets(ctx contractapi.TransactionContextInterface,
+                                       query map[string]string,
+                                       maxbuckets uint32, includeMeta bool,
+                                       token string) (*BucketListing, error) {
+    // Set a sane default on the maximum number of buckets in one call...
+    if maxbuckets == 0 || maxbuckets > 1000 {
+        maxbuckets = 1000
+    }
+
+    myuser, err := s.GetMyUser(ctx)
+    if err != nil {
+        return nil, err
+    }
+
+    // Build up the metadata portion of the query...
+    var querymap map[string]string
+    querymap["type"] = "Bucket"
+    querymap["owner"] = myuser.ID
+
+    if len(query) > 0 {
+        for k, v := range query {
+            // Prevent naughty queries....
+            if strings.Contains(k, "\"") {
+                return nil, fmt.Errorf("invalid query")
+            }
+
+            querymap["metadata." + k] = v
+        }
+    }
+
+    js, err := json.Marshal(querymap)
+    if err != nil {
+        return nil, err
+    }
+
+    dbquery := fmt.Sprintf(`{"selector":%s}`, js)
+    iter, meta, err := ctx.GetStub().GetQueryResultWithPagination(dbquery,
+            int32(maxbuckets), token)
+    if err != nil {
+        return nil, err
+    }
+    defer iter.Close()
+
+    if meta.FetchedRecordsCount < 0 {
+        return nil, fmt.Errorf("Invalid response for bucket listing")
+    }
+
+    bkts := make([]ListingBucket, meta.FetchedRecordsCount)
+    i := 0
+
+    for iter.HasNext() {
+        resp, err := iter.Next()
+        if err != nil {
+            return nil, err
+        }
+
+        var bkt Bucket
+        err = json.Unmarshal(resp.Value, &bkt)
+        if err != nil {
+            return nil, err
+        }
+
+        // Fill in this bucket.
+        bkts[i] = ListingBucket {
+            Name:       bkt.Name,
+            Owner:      bkt.Owner,
+            CTime:      bkt.CTime,
+        }
+
+        if includeMeta {
+            bkts[i].Metadata = bkt.Metadata
+        }
+
+        i++
+    }
+
+    // Fill in the metadata wrapping the listing
+    rv := BucketListing {
+        Count:          uint64(meta.FetchedRecordsCount),
+        Token:          meta.Bookmark,
+        Buckets:        bkts,
+    }
+
+    return &rv, nil
 }
 
