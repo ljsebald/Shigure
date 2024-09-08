@@ -95,6 +95,7 @@ type Bucket struct {
     Name            string              `json:"name"`
     Owner           string              `json:"owner"`
     Permissions     ACL                 `json:"perms"`
+    Metadata        map[string]string   `json:"metadata"`
 }
 
 // Object Flags:

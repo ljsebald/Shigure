@@ -82,7 +82,8 @@ func (s *SmartContract) getuserbuckets(ctx contractapi.TransactionContextInterfa
 }
 
 func (s *SmartContract) AddBucket(ctx contractapi.TransactionContextInterface,
-                                  name string) (string, error) {
+                                  name string,
+                                  metadata map[string]string) (string, error) {
     myuser, err := s.GetMyUser(ctx)
     if err != nil {
         return "", err
@@ -101,6 +102,7 @@ func (s *SmartContract) AddBucket(ctx contractapi.TransactionContextInterface,
         Type:       "Bucket",
         Name:       name,
         Owner:      myuser.ID,
+        Metadata:   metadata,
     }
 
     bktJSON, err := json.Marshal(bucket)
@@ -131,6 +133,13 @@ func (s *SmartContract) RemoveBucket(ctx contractapi.TransactionContextInterface
 
     if bkt.Owner != myuser.ID {
         return "", fmt.Errorf("permission denied")
+    }
+
+    empty, err := s.isbucketempty(ctx, name)
+    if err != nil {
+        return "", err
+    } else if !empty {
+        return "", fmt.Errorf("bucket not empty")
     }
 
     stateid, _ := ctx.GetStub().CreateCompositeKey("Bucket", []string{name})
