@@ -19,6 +19,11 @@ func (s *SmartContract) initobjects(ctx contractapi.TransactionContextInterface)
 func (s *SmartContract) GetObjectByPath(ctx contractapi.TransactionContextInterface,
                                         bucket string,
                                         key string) (*Object, error) {
+    myuser, err := s.GetMyUser(ctx)
+    if err != nil {
+        return nil, err
+    }
+
     sid, _ := ctx.GetStub().CreateCompositeKey("Object", []string{bucket, key})
     objJSON, err := ctx.GetStub().GetState(sid)
     if err != nil {
@@ -33,7 +38,29 @@ func (s *SmartContract) GetObjectByPath(ctx contractapi.TransactionContextInterf
         return nil, err
     }
 
-    // TODO: Check the ACL.
+    bkt, err := s.GetBucket(ctx, bucket)
+    if err != nil {
+        return nil, err
+    }
+
+    // Test if the ACL says this is ok if this file isn't owned by the user.
+    if obj.Owner != myuser.ID {
+        ok := false
+
+        // If the object has an ACL, it controls the access. Otherwise, check
+        // the bucket's ACL.
+        if len(obj.Permissions) != 0 {
+            ok = s.testaclaccess(ctx, obj.Permissions, myuser.UID, bucket,
+                                 ACL_AccessType_Read)
+        } else if len(bkt.Permissions) != 0 {
+            ok = s.testaclaccess(ctx, bkt.Permissions, myuser.UID, bucket,
+                                 ACL_AccessType_Read)
+        }
+
+        if !ok {
+            return nil, fmt.Errorf("permission denied")
+        }
+    }
 
     return &obj, nil
 }
@@ -46,7 +73,7 @@ func (s *SmartContract) CreateEmptyObject(ctx contractapi.TransactionContextInte
     nullmd5 := [16]byte { 0xd4, 0x1d, 0x8c, 0xd9, 0x8f, 0x00, 0xb2, 0x04,
                           0xe9, 0x80, 0x09, 0x98, 0xec, 0xf8, 0x42, 0x7e }
     err := s.createobject(ctx, bucket, key, 0, nullmd5, metadata, aclTemplate,
-                          overwrite, 0x01)
+                          0x01, overwrite)
     return err == nil, err
 }
 
@@ -57,7 +84,7 @@ func (s *SmartContract) CreateObject(ctx contractapi.TransactionContextInterface
                                      aclTemplate string,
                                      overwrite bool) (string, error) {
     err := s.createobject(ctx, bucket, key, size, md5sum, metadata, aclTemplate,
-                          overwrite, 0)
+                          0, overwrite)
 
     if err != nil {
         return "", err
@@ -79,6 +106,11 @@ func (s *SmartContract) createobject(ctx contractapi.TransactionContextInterface
     }
 
     bkt, err := s.GetBucket(ctx, bucket)
+    if err != nil {
+        return err
+    }
+
+    acl, err := s.getuseraclbyname(ctx, myuser.ID, aclTemplate)
     if err != nil {
         return err
     }
@@ -105,18 +137,17 @@ func (s *SmartContract) createobject(ctx contractapi.TransactionContextInterface
     }
 
     obj := Object {
-        Type:       "Object",
-        Bucket:     bucket,
-        Key:        key,
-        Owner:      myuser.ID,
-        MD5Sum:     md5sum,
-        Size:       size,
-        CTime:      time.Now().Unix(),
-        Metadata:   metadata,
-        Flags:      flags,
+        Type:           "Object",
+        Bucket:         bucket,
+        Key:            key,
+        Owner:          myuser.ID,
+        MD5Sum:         md5sum,
+        Size:           size,
+        CTime:          time.Now().Unix(),
+        Metadata:       metadata,
+        Flags:          flags,
+        Permissions:    templatetoacl(acl),
     }
-
-    // TODO: Add the ACL, if specified.
 
     objJSON, err := json.Marshal(obj)
     if err != nil {
@@ -140,14 +171,33 @@ func (s *SmartContract) RemoveObject(ctx contractapi.TransactionContextInterface
         return "", err
     }
 
-    obj, err := s.ObjectByPath(ctx, bucket, key)
+    obj, err := s.GetObjectByPath(ctx, bucket, key)
     if err != nil {
         return "", err
     }
 
-    // TODO: ACL check
+    bkt, err := s.GetBucket(ctx, bucket)
+    if err != nil {
+        return "", err
+    }
+
+    // Test if the ACL says this is ok if this file isn't owned by the user.
     if obj.Owner != myuser.ID {
-        return "", fmt.Errorf("permission denied")
+        ok := false
+
+        // If the object has an ACL, it controls the access. Otherwise, check
+        // the bucket's ACL.
+        if len(obj.Permissions) != 0 {
+            ok = s.testaclaccess(ctx, obj.Permissions, myuser.UID, bucket,
+                                 ACL_AccessType_Delete)
+        } else if len(bkt.Permissions) != 0 {
+            ok = s.testaclaccess(ctx, bkt.Permissions, myuser.UID, bucket,
+                                 ACL_AccessType_Delete)
+        }
+
+        if !ok {
+            return "", fmt.Errorf("permission denied")
+        }
     }
 
     indexFile := (obj.Flags & 0x01) == 0x01
