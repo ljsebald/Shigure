@@ -7,6 +7,7 @@ package chaincode
 import (
     "encoding/json"
     "fmt"
+    "strings"
     "time"
 
     "github.com/hyperledger/fabric-contract-api-go/v2/contractapi"
@@ -69,12 +70,13 @@ func (s *SmartContract) GetObjectByPath(ctx contractapi.TransactionContextInterf
 func (s *SmartContract) CreateEmptyObject(ctx contractapi.TransactionContextInterface,
                                           bucket string, key string,
                                           metadata map[string]string,
+                                          tags []string,
                                           aclTemplate string,
                                           overwrite bool) (bool, error) {
     nullmd5 := [16]byte { 0xd4, 0x1d, 0x8c, 0xd9, 0x8f, 0x00, 0xb2, 0x04,
                           0xe9, 0x80, 0x09, 0x98, 0xec, 0xf8, 0x42, 0x7e }
-    err := s.createobject(ctx, bucket, key, 0, nullmd5, metadata, aclTemplate,
-                          0x01, overwrite)
+    err := s.createobject(ctx, bucket, key, 0, nullmd5, metadata, tags,
+                          aclTemplate, ObjectFlag_IndexOnly, overwrite)
     return err == nil, err
 }
 
@@ -82,10 +84,11 @@ func (s *SmartContract) CreateObject(ctx contractapi.TransactionContextInterface
                                      bucket string, key string, size uint64,
                                      md5sum [16]byte,
                                      metadata map[string]string,
+                                     tags []string,
                                      aclTemplate string,
                                      overwrite bool) (string, error) {
-    err := s.createobject(ctx, bucket, key, size, md5sum, metadata, aclTemplate,
-                          0, overwrite)
+    err := s.createobject(ctx, bucket, key, size, md5sum, metadata, tags,
+                          aclTemplate, 0, overwrite)
 
     if err != nil {
         return "", err
@@ -99,6 +102,7 @@ func (s *SmartContract) createobject(ctx contractapi.TransactionContextInterface
                                      bucket string, key string, size uint64,
                                      md5sum [16]byte,
                                      metadata map[string]string,
+                                     tags []string,
                                      aclTemplate string, flags uint64,
                                      overwrite bool) error {
     myuser, err := s.GetMyUser(ctx)
@@ -172,6 +176,7 @@ func (s *SmartContract) createobject(ctx contractapi.TransactionContextInterface
         CTime:          time.Now().Unix(),
         Metadata:       metadata,
         Flags:          flags,
+        Tags:           tags,
         Permissions:    templatetoacl(acl),
     }
 
@@ -226,7 +231,7 @@ func (s *SmartContract) RemoveObject(ctx contractapi.TransactionContextInterface
         }
     }
 
-    indexFile := (obj.Flags & 0x01) == 0x01
+    indexFile := (obj.Flags & ObjectFlag_IndexOnly) != 0
 
     // Create a delete record and save it to world state.
     dr := DeleteRecord {
@@ -242,6 +247,7 @@ func (s *SmartContract) RemoveObject(ctx contractapi.TransactionContextInterface
         CTime:          obj.CTime,
         DTime:          time.Now().Unix(),
         Metadata:       obj.Metadata,
+        Tags:           obj.Tags,
         Flags:          obj.Flags,
     }
 
@@ -274,8 +280,8 @@ func (s *SmartContract) RemoveObject(ctx contractapi.TransactionContextInterface
 }
 
 func (s *SmartContract) ListObjects(ctx contractapi.TransactionContextInterface,
-                                    bucket string,
-                                    maxobjs uint32,
+                                    bucket string, maxobjs uint32,
+                                    includeMeta bool,
                                     token string) (*ObjectListing, error) {
     // Set a sane default on the maximum number of objects.
     if maxobjs == 0 || maxobjs > 1000 {
@@ -339,6 +345,120 @@ func (s *SmartContract) ListObjects(ctx contractapi.TransactionContextInterface,
             Size:       obj.Size,
             CTime:      obj.CTime,
             MD5Sum:     obj.MD5Sum,
+        }
+
+        if includeMeta {
+            objs[i].Metadata = obj.Metadata
+            objs[i].Tags = obj.Tags
+        }
+
+        i++
+    }
+
+    // Fill in the metadata wrapping the listing
+    rv := ObjectListing {
+        Bucket:         bucket,
+        Count:          uint64(meta.FetchedRecordsCount),
+        Token:          meta.Bookmark,
+        Objects:        objs,
+    }
+
+    return &rv, nil
+}
+
+func (s *SmartContract) QueryObjects(ctx contractapi.TransactionContextInterface,
+                                     bucket string, query map[string]string,
+                                     maxobjs uint32, includeMeta bool,
+                                     token string) (*ObjectListing, error) {
+    // Set a sane default on the maximum number of objects.
+    if maxobjs == 0 || maxobjs > 1000 {
+        maxobjs = 1000
+    }
+
+    myuser, err := s.GetMyUser(ctx)
+    if err != nil {
+        return nil, err
+    }
+
+    bkt, err := s.GetBucket(ctx, bucket)
+    if err != nil {
+        return nil, err
+    }
+
+    // Test if the ACL says this is ok if this bucket isn't owned by the user.
+    if bkt.Owner != myuser.ID {
+        ok := false
+
+        if len(bkt.Permissions) != 0 {
+            ok = s.testaclaccess(ctx, bkt.Permissions, myuser.UID, bucket,
+                                 ACL_AccessType_List)
+        }
+
+        if !ok {
+            return nil, fmt.Errorf("permission denied")
+        }
+    }
+
+    // Build up the metadata portion of the query...
+    var querymap map[string]string
+    querymap["type"] = "Object"
+    querymap["bucket"] = bucket
+
+    if len(query) > 0 {
+        for k, v := range query {
+            // Prevent naughty queries....
+            if strings.Contains(k, "\"") {
+                return nil, fmt.Errorf("invalid query")
+            }
+
+            querymap["metadata." + k] = v
+        }
+    }
+
+    js, err := json.Marshal(querymap)
+    if err != nil {
+        return nil, err
+    }
+
+    dbquery := fmt.Sprintf(`{"selector":%s}`, js)
+    iter, meta, err := ctx.GetStub().GetQueryResultWithPagination(dbquery,
+            int32(maxobjs), token)
+    if err != nil {
+        return nil, err
+    }
+    defer iter.Close()
+
+    if meta.FetchedRecordsCount < 0 {
+        return nil, fmt.Errorf("Invalid response for object listing")
+    }
+
+    objs := make([]ListingObject, meta.FetchedRecordsCount)
+    i := 0
+
+    for iter.HasNext() {
+        resp, err := iter.Next()
+        if err != nil {
+            return nil, err
+        }
+
+        var obj Object
+        err = json.Unmarshal(resp.Value, &obj)
+        if err != nil {
+            return nil, err
+        }
+
+        // Fill in this object.
+        objs[i] = ListingObject {
+            Key:        obj.Key,
+            Owner:      obj.Owner,
+            Size:       obj.Size,
+            CTime:      obj.CTime,
+            MD5Sum:     obj.MD5Sum,
+        }
+
+        if includeMeta {
+            objs[i].Metadata = obj.Metadata
+            objs[i].Tags = obj.Tags
         }
 
         i++

@@ -98,7 +98,7 @@ type Bucket struct {
 }
 
 // Object Flags:
-// 0x01 = Index only file (no data blocks)
+const ObjectFlag_IndexOnly      uint64 = 0x01
 
 type Object struct {
     Type            string              `json:"type"`
@@ -111,6 +111,7 @@ type Object struct {
     Size            uint64              `json:"size"`
     CTime           int64               `json:"ctime"`
     Metadata        map[string]string   `json:"metadata"`
+    Tags            []string            `json:"tags"`
     Flags           uint64              `json:"flags"`
 }
 
@@ -127,6 +128,7 @@ type DeleteRecord struct {
     CTime           int64               `json:"ctime"`
     DTime           int64               `json:"dtime"`
     Metadata        map[string]string   `json:"metadata"`
+    Tags            []string            `json:"tags"`
     Flags           uint64              `json:"flags"`
 }
 
@@ -136,6 +138,8 @@ type ListingObject struct {
     Size            uint64              `json:"size"`
     CTime           int64               `json:"ctime"`
     MD5Sum          [16]byte            `json:"md5sum"`
+    Metadata        map[string]string   `json:"metadata"`
+    Tags            []string            `json:"tags"`
 }
 
 type ObjectListing struct {
