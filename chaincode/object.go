@@ -273,3 +273,85 @@ func (s *SmartContract) RemoveObject(ctx contractapi.TransactionContextInterface
     return "true", nil
 }
 
+func (s *SmartContract) ListObjects(ctx contractapi.TransactionContextInterface,
+                                    bucket string,
+                                    maxobjs uint32,
+                                    token string) (*ObjectListing, error) {
+    // Set a sane default on the maximum number of objects.
+    if maxobjs == 0 || maxobjs > 1000 {
+        maxobjs = 1000
+    }
+
+    myuser, err := s.GetMyUser(ctx)
+    if err != nil {
+        return nil, err
+    }
+
+    bkt, err := s.GetBucket(ctx, bucket)
+    if err != nil {
+        return nil, err
+    }
+
+    // Test if the ACL says this is ok if this bucket isn't owned by the user.
+    if bkt.Owner != myuser.ID {
+        ok := false
+
+        if len(bkt.Permissions) != 0 {
+            ok = s.testaclaccess(ctx, bkt.Permissions, myuser.UID, bucket,
+                                 ACL_AccessType_List)
+        }
+
+        if !ok {
+            return nil, fmt.Errorf("permission denied")
+        }
+    }
+
+    iter, meta, err := ctx.GetStub().GetStateByPartialCompositeKeyWithPagination("Object",
+            []string{bucket}, int32(maxobjs), token)
+    if err != nil {
+        return nil, err
+    }
+    defer iter.Close()
+
+    if meta.FetchedRecordsCount < 0 {
+        return nil, fmt.Errorf("Invalid response for object listing")
+    }
+
+    objs := make([]ListingObject, meta.FetchedRecordsCount)
+    i := 0
+
+    for iter.HasNext() {
+        resp, err := iter.Next()
+        if err != nil {
+            return nil, err
+        }
+
+        var obj Object
+        err = json.Unmarshal(resp.Value, &obj)
+        if err != nil {
+            return nil, err
+        }
+
+        // Fill in this object.
+        objs[i] = ListingObject {
+            Key:        obj.Key,
+            Owner:      obj.Owner,
+            Size:       obj.Size,
+            CTime:      obj.CTime,
+            MD5Sum:     obj.MD5Sum,
+        }
+
+        i++
+    }
+
+    // Fill in the metadata wrapping the listing
+    rv := ObjectListing {
+        Bucket:         bucket,
+        Count:          uint64(meta.FetchedRecordsCount),
+        Token:          meta.Bookmark,
+        Objects:        objs,
+    }
+
+    return &rv, nil
+}
+

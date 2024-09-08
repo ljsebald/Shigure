@@ -82,6 +82,7 @@ const ACL_AccessType_Read       uint32 = 0x00
 const ACL_AccessType_Create     uint32 = 0x01
 const ACL_AccessType_Overwrite  uint32 = 0x02
 const ACL_AccessType_Delete     uint32 = 0x03
+const ACL_AccessType_List       uint32 = 0x04
 
 type ACLTest struct {
     UID             string              `json:"uid"`
@@ -127,6 +128,21 @@ type DeleteRecord struct {
     DTime           int64               `json:"dtime"`
     Metadata        map[string]string   `json:"metadata"`
     Flags           uint64              `json:"flags"`
+}
+
+type ListingObject struct {
+    Key             string              `json:"key"`
+    Owner           string              `json:"owner"`
+    Size            uint64              `json:"size"`
+    CTime           int64               `json:"ctime"`
+    MD5Sum          [16]byte            `json:"md5sum"`
+}
+
+type ObjectListing struct {
+    Bucket          string              `json:"bucket"`
+    Count           uint64              `json:"count"`
+    Token           string              `json:"token"`
+    Objects         []ListingObject     `json:"objects"`
 }
 
 func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) error {

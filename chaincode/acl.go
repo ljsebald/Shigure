@@ -109,7 +109,7 @@ func (s *SmartContract) CreateACL(ctx contractapi.TransactionContextInterface,
     }
 
     // Fill in the group and user permissions that were passed in.
-    // XXX: Detect duplicates and reject.
+    // Since these are stored as maps, there can't be any duplicates.
     i := 0
     for k, v := range gperms {
         grp, err := s.GetGroupByName(ctx, k)
@@ -446,6 +446,7 @@ var access_to_bits = [...]uint32 {
     ACL_Perms_CreateObject,
     ACL_Perms_OverwriteObject,
     ACL_Perms_DeleteObject,
+    ACL_Perms_ListObjects,
 }
 
 func (s *SmartContract) testaclaccess(ctx contractapi.TransactionContextInterface,
