@@ -88,7 +88,7 @@ func (s *SmartContract) AddBucket(ctx contractapi.TransactionContextInterface,
         return "", err
     }
 
-    if (myuser.SysPerms & 0x08) == 0 {
+    if (myuser.SysPerms & User_SysPerms_AddBuckets) == 0 {
         return "", fmt.Errorf("permission denied")
     }
 

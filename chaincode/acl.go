@@ -120,7 +120,7 @@ func (s *SmartContract) CreateACL(ctx contractapi.TransactionContextInterface,
         acl.Permissions[i] = ACLEntry {
             ID:             grp.ID,
             Entity:         fmt.Sprintf("Group: %s", k),
-            EntryType:      1,
+            EntryType:      ACL_EntryType_Group,
             Permissions:    v,
         }
 
@@ -136,7 +136,7 @@ func (s *SmartContract) CreateACL(ctx contractapi.TransactionContextInterface,
         acl.Permissions[i] = ACLEntry {
             ID:             usr.ID,
             Entity:         fmt.Sprintf("User: %s", k),
-            EntryType:      0,
+            EntryType:      ACL_EntryType_User,
             Permissions:    v,
         }
 
@@ -167,7 +167,7 @@ func (s *SmartContract) DeleteACLEntry(ctx contractapi.TransactionContextInterfa
 
     var id string
 
-    if entrytype == 0 {
+    if entrytype == ACL_EntryType_User {
         usr, err := s.GetUserByUID(ctx, entity)
         if err != nil {
             return false, fmt.Errorf("unknown user")
@@ -222,7 +222,7 @@ func (s *SmartContract) AddACLEntry(ctx contractapi.TransactionContextInterface,
 
     var id string
 
-    if entrytype == 0 {
+    if entrytype == ACL_EntryType_User {
         usr, err := s.GetUserByUID(ctx, entity)
         if err != nil {
             return false, fmt.Errorf("unknown user")
@@ -280,7 +280,7 @@ func (s *SmartContract) EditACLEntry(ctx contractapi.TransactionContextInterface
 
     var id string
 
-    if entrytype == 0 {
+    if entrytype == ACL_EntryType_User {
         usr, err := s.GetUserByUID(ctx, entity)
         if err != nil {
             return false, fmt.Errorf("unknown user")
@@ -441,7 +441,12 @@ func (s *SmartContract) GetAllMyACLs(ctx contractapi.TransactionContextInterface
     return acls, nil
 }
 
-var access_to_bits = [...]uint32 { 0x02, 0x04, 0x08, 0x10 }
+var access_to_bits = [...]uint32 {
+    ACL_Perms_ReadObject,
+    ACL_Perms_CreateObject,
+    ACL_Perms_OverwriteObject,
+    ACL_Perms_DeleteObject,
+}
 
 func (s *SmartContract) testaclaccess(ctx contractapi.TransactionContextInterface,
                                       acl ACL, uid string, bucket string,
@@ -473,13 +478,13 @@ func (s *SmartContract) testaclaccess(ctx contractapi.TransactionContextInterfac
             continue
         }
 
-        if ent.EntryType == 0 {
+        if ent.EntryType == ACL_EntryType_User {
             // The iuser map includes both direct and inherited permissions.
             p := iuser[ent.ID]
             if (p & ent.Permissions) != 0 {
                 return true
             }
-        } else if ent.EntryType == 1 {
+        } else if ent.EntryType == ACL_EntryType_Group {
             // The groups map includes both direct and inherited permissions.
             p := groups[ent.ID]
             if (p & ent.Permissions) != 0 {

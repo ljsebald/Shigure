@@ -12,25 +12,19 @@ type SmartContract struct {
     contractapi.Contract
 }
 
-// Sysperms:
-// 0x01 = add users
-// 0x02 = add subusers of self
-// 0x04 = add groups (and subgroups)
-// 0x08 = add buckets
+// System Permissions
+const User_SysPerms_AddUsers    uint32 = 0x01
+const User_SysPerms_AddSubUsers uint32 = 0x02
+const User_SysPerms_AddGroups   uint32 = 0x04
+const User_SysPerms_AddBuckets  uint32 = 0x08
 
-// Bucket perms (ACLs are similar):
-// 0x01 = list objects (and read metadata)
-// 0x02 = read any object
-// 0x04 = create objects
-// 0x08 = overwrite any object
-// 0x10 = delete any object
-// 0x20 = reserved
-// 0x40 = reserved
-// 0x80 = reserved
-// low order byte = owner
-// 2nd order byte = group
-// 3rd order byte = everyone
-// high order byte = reserved
+// ACL/Bucket Permissions
+const ACL_Perms_ListObjects     uint32 = 0x01
+const ACL_Perms_ReadObject      uint32 = 0x02
+const ACL_Perms_CreateObject    uint32 = 0x04
+const ACL_Perms_OverwriteObject uint32 = 0x08
+const ACL_Perms_DeleteObject    uint32 = 0x10
+// 0x20+ = Reserved
 
 type SubUser struct {
     ID              string              `json:"id"`
@@ -63,9 +57,9 @@ type Group struct {
     SubGroups       []SubGroup          `json:"subgroups"`
 }
 
-// EntryType:
-// 0 = User
-// 1 = Group
+// EntryType
+const ACL_EntryType_User    uint32 = 0x00
+const ACL_EntryType_Group   uint32 = 0x01
 
 type ACLEntry struct {
     ID              string              `json:"id"`
@@ -84,11 +78,10 @@ type ACLTemplate struct {
     Permissions     ACL                 `json:"perms"`
 }
 
-// AccessType:
-// 0 = Read
-// 1 = Create
-// 2 = Overwrite
-// 3 = Delete
+const ACL_AccessType_Read       uint32 = 0x00
+const ACL_AccessType_Create     uint32 = 0x01
+const ACL_AccessType_Overwrite  uint32 = 0x02
+const ACL_AccessType_Delete     uint32 = 0x03
 
 type ACLTest struct {
     UID             string              `json:"uid"`

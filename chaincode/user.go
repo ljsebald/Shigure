@@ -91,7 +91,7 @@ func (s *SmartContract) AddUser(ctx contractapi.TransactionContextInterface,
         return "", err
     }
 
-    if (myuser.SysPerms & 0x01) == 0 {
+    if (myuser.SysPerms & User_SysPerms_AddUsers) == 0 {
         return "", fmt.Errorf("permission denied")
     }
 
@@ -158,8 +158,8 @@ func (s *SmartContract) AddSubUser(ctx contractapi.TransactionContextInterface,
                                    uid string, perms map[string]uint32,
                                    sysperms uint32) (string, error) {
     // Sub-users can't add new regular users.
-    if (sysperms & 0x01) != 0 {
-        return "", fmt.Errorf("permission denied")
+    if (sysperms & User_SysPerms_AddUsers) != 0 {
+        return "", fmt.Errorf("invalid system permissions")
     }
 
     // Make sure we're allowed to do this...
@@ -168,7 +168,7 @@ func (s *SmartContract) AddSubUser(ctx contractapi.TransactionContextInterface,
         return "", err
     }
 
-    if (myuser.SysPerms & 0x02) == 0 {
+    if (myuser.SysPerms & User_SysPerms_AddSubUsers) == 0 {
         return "", fmt.Errorf("permission denied")
     }
 
