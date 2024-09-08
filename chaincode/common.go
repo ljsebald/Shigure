@@ -101,6 +101,7 @@ type Bucket struct {
 
 type Object struct {
     Type            string              `json:"type"`
+    ID              string              `json:"id"`
     Bucket          string              `json:"bucket"`
     Key             string              `json:"key"`
     Owner           string              `json:"owner"`

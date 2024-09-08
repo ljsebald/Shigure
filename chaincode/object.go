@@ -10,6 +10,7 @@ import (
     "time"
 
     "github.com/hyperledger/fabric-contract-api-go/v2/contractapi"
+    "github.com/google/uuid"
 )
 
 func (s *SmartContract) initobjects(ctx contractapi.TransactionContextInterface) error {
@@ -117,27 +118,52 @@ func (s *SmartContract) createobject(ctx contractapi.TransactionContextInterface
 
     // Check if the object exists already.
     tmp, _ := s.GetObjectByPath(ctx, bucket, key)
+    ok := false
     if tmp != nil {
         if !overwrite {
             return fmt.Errorf("object already exists")
         }
 
-        // TODO: Check the ACL of the object and the bucket to see if we can
-        // overwrite the object. Object ACL overrides the bucket one.
+        // If someone else owns the object, check the ACL to see if we can
+        // overwrite it or not.
         if tmp.Owner != myuser.ID {
-            return fmt.Errorf("permission denied")
+            // If the object has an ACL, it controls the access. Otherwise,
+            // check the bucket's ACL.
+            if len(tmp.Permissions) != 0 {
+                ok = s.testaclaccess(ctx, tmp.Permissions, myuser.UID, bucket,
+                                     ACL_AccessType_Overwrite)
+            } else if len(bkt.Permissions) != 0 {
+                ok = s.testaclaccess(ctx, bkt.Permissions, myuser.UID, bucket,
+                                     ACL_AccessType_Overwrite)
+            }
+
+            if !ok {
+                return fmt.Errorf("permission denied")
+            }
         }
 
         // XXX: Handle removing old object if needed.
     }
 
-    // TODO: Do an ACL check if the bucket has one.
-    if bkt.Owner != myuser.ID {
-        return fmt.Errorf("permission denied")
+    // If we don't already have permission from the above check (for
+    // overwriting), check if we have permission to create objects in this
+    // bucket.
+    if !ok && bkt.Owner != myuser.ID {
+        // We only have to check the bucket's acl, because we don't have an
+        // object yet in this case.
+        if len(bkt.Permissions) != 0 {
+            ok = s.testaclaccess(ctx, bkt.Permissions, myuser.UID, bucket,
+                                 ACL_AccessType_Create)
+        }
+
+        if !ok {
+            return fmt.Errorf("permission denied")
+        }
     }
 
     obj := Object {
         Type:           "Object",
+        ID:             uuid.NewString(),
         Bucket:         bucket,
         Key:            key,
         Owner:          myuser.ID,
@@ -202,11 +228,38 @@ func (s *SmartContract) RemoveObject(ctx contractapi.TransactionContextInterface
 
     indexFile := (obj.Flags & 0x01) == 0x01
 
-    // TODO: Store Delete Record
+    // Create a delete record and save it to world state.
+    dr := DeleteRecord {
+        Type:           "DeletedObject",
+        ID:             obj.ID,
+        Bucket:         obj.Bucket,
+        Key:            obj.Key,
+        Owner:          obj.Owner,
+        Deleter:        myuser.ID,
+        Permissions:    obj.Permissions,
+        MD5Sum:         obj.MD5Sum,
+        Size:           obj.Size,
+        CTime:          obj.CTime,
+        DTime:          time.Now().Unix(),
+        Metadata:       obj.Metadata,
+        Flags:          obj.Flags,
+    }
+
+    drJSON, err := json.Marshal(dr)
+    if err != nil {
+        return "", err
+    }
+
+    sidDr, _ := ctx.GetStub().CreateCompositeKey("DeletedObject", []string{obj.ID})
+    err = ctx.GetStub().PutState(sidDr, drJSON)
+    if err != nil {
+        return "", fmt.Errorf("failed to put delete record to world state. %v", err)
+    }
 
     sid, _ := ctx.GetStub().CreateCompositeKey("Object", []string{bucket, key})
     err = ctx.GetStub().DelState(sid)
     if err != nil {
+        ctx.GetStub().DelState(sidDr)
         return "", fmt.Errorf("failed to delete from world state. %v", err)
     }
 
