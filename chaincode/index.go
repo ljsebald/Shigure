@@ -8,6 +8,7 @@ import (
     "encoding/json"
     "fmt"
 
+    "github.com/hyperledger/fabric-chaincode-go/v2/shim"
     "github.com/hyperledger/fabric-contract-api-go/v2/contractapi"
     "github.com/google/uuid"
 )
@@ -157,5 +158,11 @@ func (s *SmartContract) removeobjectfromindex(ctx contractapi.TransactionContext
     sid, _ := ctx.GetStub().CreateCompositeKey("IndexEntry",
             []string{indexid, value, objectid})
     return ctx.GetStub().DelState(sid)
+}
+
+func (s *SmartContract) getindexiterator(ctx contractapi.TransactionContextInterface,
+                                         indexid string, value string) (shim.StateQueryIteratorInterface, error) {
+    return ctx.GetStub().GetStateByPartialCompositeKey("IndexEntry",
+            []string{indexid, value})
 }
 
