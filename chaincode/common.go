@@ -164,6 +164,14 @@ type ListingBucket struct {
     Metadata        map[string]string   `json:"metadata"`
 }
 
+type UserIndex struct {
+    Type            string              `json:"type"`
+    ID              string              `json:"id"`
+    Owner           string              `json:"owner"`
+    Bucket          string              `json:"bucket"`
+    Field           string              `json:"field"`
+}
+
 func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) error {
     err := s.initusers(ctx)
     if err != nil {
@@ -185,6 +193,16 @@ func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) 
         return err
     }
 
-    return s.initobjects(ctx)
+    err = s.initobjects(ctx)
+    if err != nil {
+        return err
+    }
+
+    err = s.initindex(ctx)
+    if err != nil {
+        return err
+    }
+
+    return nil
 }
 
