@@ -112,6 +112,7 @@ func (s *SmartContract) adduser_int(ctx contractapi.TransactionContextInterface,
         UID:        uid,
         Parent:     parent,
         SysPerms:   sysperms,
+        SubUsers:   make([]SubUser, 0),
     }
 
     usrJSON, err := json.Marshal(newuser)

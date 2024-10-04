@@ -101,11 +101,12 @@ func (s *SmartContract) AddBucket(ctx contractapi.TransactionContextInterface,
     }
 
     bucket := Bucket {
-        Type:       "Bucket",
-        Name:       name,
-        Owner:      myuser.ID,
-        Metadata:   metadata,
-        CTime:      time.Now().Unix(),
+        Type:           "Bucket",
+        Name:           name,
+        Owner:          myuser.ID,
+        Metadata:       metadata,
+        CTime:          time.Now().Unix(),
+        Permissions:    make([]ACLEntry, 0),
     }
 
     bktJSON, err := json.Marshal(bucket)
@@ -207,7 +208,7 @@ func (s *SmartContract) QueryMyBuckets(ctx contractapi.TransactionContextInterfa
     }
 
     // Build up the metadata portion of the query...
-    var querymap map[string]string
+    querymap := make(map[string]string)
     querymap["type"] = "Bucket"
     querymap["owner"] = myuser.ID
 

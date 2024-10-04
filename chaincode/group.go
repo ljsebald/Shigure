@@ -17,11 +17,13 @@ import (
 func (s *SmartContract) initgroups(ctx contractapi.TransactionContextInterface) error {
     // Create a "none" group
     grp := Group {
-        Type:   "Group",
-        ID:     "ffffffff-ffff-ffff-ffff-ffffffffffff",
-        Name:   "none",
-        Owner:  "",
-        Parent: "",
+        Type:       "Group",
+        ID:         "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        Name:       "none",
+        Owner:      "",
+        Parent:     "",
+        Users:      make([]string, 0),
+        SubGroups:  make([]SubGroup, 0),
     }
 
     grpJSON, err := json.Marshal(grp)
@@ -117,11 +119,14 @@ func (s *SmartContract) addgroup_int(ctx contractapi.TransactionContextInterface
         Name:       name,
         Owner:      owner,
         Parent:     parent,
+        SubGroups:  make([]SubGroup, 0),
     }
 
     if addowner {
         grp.Users = make([]string, 1)
         grp.Users[0] = owner
+    } else {
+        grp.Users = make([]string, 0)
     }
 
     grpJSON, err := json.Marshal(grp)

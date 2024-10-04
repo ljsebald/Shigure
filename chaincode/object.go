@@ -289,22 +289,14 @@ func (s *SmartContract) RemoveObject(ctx contractapi.TransactionContextInterface
 
 func (s *SmartContract) isbucketempty(ctx contractapi.TransactionContextInterface,
                                       bucket string) (bool, error) {
-    iter, meta, err := ctx.GetStub().GetStateByPartialCompositeKeyWithPagination("Object",
-            []string{bucket}, 1, "")
+    iter, err := ctx.GetStub().GetStateByPartialCompositeKey("Object",
+            []string{bucket})
     if err != nil {
         return false, err
     }
     defer iter.Close()
 
-    if meta.FetchedRecordsCount < 0 {
-        return false, fmt.Errorf("Invalid response for object listing")
-    }
-
-    if meta.FetchedRecordsCount > 0 {
-        return false, nil
-    }
-
-    return true, nil
+    return !iter.HasNext(), nil
 }
 
 func (s *SmartContract) ListObjects(ctx contractapi.TransactionContextInterface,
