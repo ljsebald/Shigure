@@ -179,6 +179,14 @@ func (s *SmartContract) createobject(ctx contractapi.TransactionContextInterface
             }
         }
 
+        // Remove the object from any indexes it is in.
+        for k, v := range tmp.Metadata {
+            idx, _ := s.getindex(ctx, myuser.ID, k, bucket)
+            if idx != nil {
+                s.removeobjectfromindex(ctx, idx.ID, v, key)
+            }
+        }
+
         // XXX: Handle removing old object if needed.
     }
 
