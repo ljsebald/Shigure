@@ -115,9 +115,12 @@ func (s *SmartContract) createobject(ctx contractapi.TransactionContextInterface
         return err
     }
 
-    acl, err := s.getuseraclbyname(ctx, myuser.ID, aclTemplate)
-    if err != nil {
-        return err
+    var acl *ACLTemplate
+    if aclTemplate != "" {
+        acl, err = s.getuseraclbyname(ctx, myuser.ID, aclTemplate)
+        if err != nil {
+            return err
+        }
     }
 
     // Check if the object exists already.

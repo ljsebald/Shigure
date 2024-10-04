@@ -515,16 +515,20 @@ func (s *SmartContract) TestMyACL(ctx contractapi.TransactionContextInterface,
 
 // Convert a template into a stored ACL for an object or bucket
 func templatetoacl(tacl *ACLTemplate) ACL {
-    acl := make([]ACLEntry, len(tacl.Permissions))
+    if tacl != nil {
+        acl := make([]ACLEntry, len(tacl.Permissions))
 
-    for i, _ := range tacl.Permissions {
-        acl[i] = ACLEntry {
-            ID:             tacl.Permissions[i].ID,
-            EntryType:      tacl.Permissions[i].EntryType,
-            Permissions:    tacl.Permissions[i].Permissions,
+        for i, _ := range tacl.Permissions {
+            acl[i] = ACLEntry {
+                ID:             tacl.Permissions[i].ID,
+                EntryType:      tacl.Permissions[i].EntryType,
+                Permissions:    tacl.Permissions[i].Permissions,
+            }
         }
-    }
 
-    return acl
+        return acl
+    } else {
+        return make([]ACLEntry, 0)
+    }
 }
 
