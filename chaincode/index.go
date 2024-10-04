@@ -162,7 +162,12 @@ func (s *SmartContract) removeobjectfromindex(ctx contractapi.TransactionContext
 
 func (s *SmartContract) getindexiterator(ctx contractapi.TransactionContextInterface,
                                          indexid string, value string) (shim.StateQueryIteratorInterface, error) {
-    return ctx.GetStub().GetStateByPartialCompositeKey("IndexEntry",
-            []string{indexid, value})
+    if value != "" {
+        return ctx.GetStub().GetStateByPartialCompositeKey("IndexEntry",
+                []string{indexid, value})
+    } else {
+        return ctx.GetStub().GetStateByPartialCompositeKey("IndexEntry",
+            []string{indexid})
+    }
 }
 

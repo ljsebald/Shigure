@@ -101,6 +101,7 @@ type Bucket struct {
 
 // Object Flags:
 const ObjectFlag_IndexOnly      uint64 = 0x01
+const ObjectFlag_Staged         uint64 = 0x02
 
 type Object struct {
     Type            string              `json:"type"`

@@ -191,6 +191,14 @@ func (s *SmartContract) createobject(ctx contractapi.TransactionContextInterface
         return fmt.Errorf("failed to put to world state. %v", err)
     }
 
+    // Add the object to any indexes it belongs in.
+    for k, v := range metadata {
+        idx, _ := s.getindex(ctx, myuser.ID, k, bucket)
+        if idx != nil {
+            s.addobjecttoindex(ctx, idx.ID, v, obj.ID)
+        }
+    }
+
     return nil
 }
 
@@ -493,5 +501,322 @@ func (s *SmartContract) QueryObjects(ctx contractapi.TransactionContextInterface
     }
 
     return &rv, nil
+}
+
+func (s *SmartContract) QueryObjectsByIndex(ctx contractapi.TransactionContextInterface,
+                                            bucket string, key string,
+                                            value string,
+                                            maxobjs uint32, includeMeta bool,
+                                            token string) (*ObjectListing, error) {
+    // Set a sane default on the maximum number of objects.
+    if maxobjs == 0 || maxobjs > 1000 {
+        maxobjs = 1000
+    }
+
+    myuser, err := s.GetMyUser(ctx)
+    if err != nil {
+        return nil, err
+    }
+
+    bkt, err := s.GetBucket(ctx, bucket)
+    if err != nil {
+        return nil, err
+    }
+
+    // Test if the ACL says this is ok if this bucket isn't owned by the user.
+    if bkt.Owner != myuser.ID {
+        ok := false
+
+        if len(bkt.Permissions) != 0 {
+            ok = s.testaclaccess(ctx, bkt.Permissions, myuser.UID, bucket,
+                                 ACL_AccessType_List)
+        }
+
+        if !ok {
+            return nil, fmt.Errorf("permission denied")
+        }
+    }
+
+    // Look for an appropriate index
+    idx, _ := s.getindex(ctx, myuser.ID, key, bucket)
+    if idx == nil {
+        return nil, fmt.Errorf("unknown index key")
+    }
+
+    // Get the iterator
+    iter, err := s.getindexiterator(ctx, idx.ID, value)
+    if err != nil {
+        return nil, err
+    }
+
+    objs := make([]ListingObject, 0)
+    i := 0
+
+    for iter.HasNext() {
+        resp, err := iter.Next()
+        if err != nil {
+            return nil, err
+        }
+
+        var obj Object
+        err = json.Unmarshal(resp.Value, &obj)
+        if err != nil {
+            return nil, err
+        }
+
+        // Fill in this object.
+        objs[i] = ListingObject {
+            Key:        obj.Key,
+            Owner:      obj.Owner,
+            Size:       obj.Size,
+            CTime:      obj.CTime,
+            MD5Sum:     obj.MD5Sum,
+        }
+
+        if includeMeta {
+            objs[i].Metadata = obj.Metadata
+            objs[i].Tags = obj.Tags
+        }
+
+        i++
+    }
+
+    // Fill in the metadata wrapping the listing
+    rv := ObjectListing {
+        Bucket:         bucket,
+        Count:          uint64(len(objs)),
+        Token:          "",
+        Objects:        objs,
+    }
+
+    return &rv, nil
+}
+
+func (s *SmartContract) ListDeletedObjects(ctx contractapi.TransactionContextInterface,
+                                           bucket string, maxobjs uint32,
+                                           includeMeta bool,
+                                           token string) (*ObjectListing, error) {
+    // Set a sane default on the maximum number of objects.
+    if maxobjs == 0 || maxobjs > 1000 {
+        maxobjs = 1000
+    }
+
+    myuser, err := s.GetMyUser(ctx)
+    if err != nil {
+        return nil, err
+    }
+
+    bkt, err := s.GetBucket(ctx, bucket)
+    if err != nil {
+        return nil, err
+    }
+
+    // Test if the ACL says this is ok if this bucket isn't owned by the user.
+    if bkt.Owner != myuser.ID {
+        ok := false
+
+        if len(bkt.Permissions) != 0 {
+            ok = s.testaclaccess(ctx, bkt.Permissions, myuser.UID, bucket,
+                                 ACL_AccessType_List)
+        }
+
+        if !ok {
+            return nil, fmt.Errorf("permission denied")
+        }
+    }
+
+    iter, meta, err := ctx.GetStub().GetStateByPartialCompositeKeyWithPagination("DeletedObject",
+            []string{bucket}, int32(maxobjs), token)
+    if err != nil {
+        return nil, err
+    }
+    defer iter.Close()
+
+    if meta.FetchedRecordsCount < 0 {
+        return nil, fmt.Errorf("Invalid response for object listing")
+    }
+
+    objs := make([]ListingObject, meta.FetchedRecordsCount)
+    i := 0
+
+    for iter.HasNext() {
+        resp, err := iter.Next()
+        if err != nil {
+            return nil, err
+        }
+
+        var obj Object
+        err = json.Unmarshal(resp.Value, &obj)
+        if err != nil {
+            return nil, err
+        }
+
+        // Fill in this object.
+        objs[i] = ListingObject {
+            Key:        obj.Key,
+            Owner:      obj.Owner,
+            Size:       obj.Size,
+            CTime:      obj.CTime,
+            MD5Sum:     obj.MD5Sum,
+        }
+
+        if includeMeta {
+            objs[i].Metadata = obj.Metadata
+            objs[i].Tags = obj.Tags
+        }
+
+        i++
+    }
+
+    // Fill in the metadata wrapping the listing
+    rv := ObjectListing {
+        Bucket:         bucket,
+        Count:          uint64(meta.FetchedRecordsCount),
+        Token:          meta.Bookmark,
+        Objects:        objs,
+    }
+
+    return &rv, nil
+}
+
+func (s *SmartContract) QueryDeleteRecords(ctx contractapi.TransactionContextInterface,
+                                           bucket string, query map[string]string,
+                                           maxobjs uint32, includeMeta bool,
+                                           token string) (*ObjectListing, error) {
+    // Set a sane default on the maximum number of objects.
+    if maxobjs == 0 || maxobjs > 1000 {
+        maxobjs = 1000
+    }
+
+    myuser, err := s.GetMyUser(ctx)
+    if err != nil {
+        return nil, err
+    }
+
+    bkt, err := s.GetBucket(ctx, bucket)
+    if err != nil {
+        return nil, err
+    }
+
+    // Test if the ACL says this is ok if this bucket isn't owned by the user.
+    if bkt.Owner != myuser.ID {
+        ok := false
+
+        if len(bkt.Permissions) != 0 {
+            ok = s.testaclaccess(ctx, bkt.Permissions, myuser.UID, bucket,
+                                 ACL_AccessType_List)
+        }
+
+        if !ok {
+            return nil, fmt.Errorf("permission denied")
+        }
+    }
+
+    // Build up the metadata portion of the query...
+    var querymap map[string]string
+    querymap["type"] = "DeletedObject"
+    querymap["bucket"] = bucket
+
+    if len(query) > 0 {
+        for k, v := range query {
+            // Prevent naughty queries....
+            if strings.Contains(k, "\"") {
+                return nil, fmt.Errorf("invalid query")
+            }
+
+            querymap["metadata." + k] = v
+        }
+    }
+
+    js, err := json.Marshal(querymap)
+    if err != nil {
+        return nil, err
+    }
+
+    dbquery := fmt.Sprintf(`{"selector":%s}`, js)
+    iter, meta, err := ctx.GetStub().GetQueryResultWithPagination(dbquery,
+            int32(maxobjs), token)
+    if err != nil {
+        return nil, err
+    }
+    defer iter.Close()
+
+    if meta.FetchedRecordsCount < 0 {
+        return nil, fmt.Errorf("Invalid response for object listing")
+    }
+
+    objs := make([]ListingObject, meta.FetchedRecordsCount)
+    i := 0
+
+    for iter.HasNext() {
+        resp, err := iter.Next()
+        if err != nil {
+            return nil, err
+        }
+
+        var obj Object
+        err = json.Unmarshal(resp.Value, &obj)
+        if err != nil {
+            return nil, err
+        }
+
+        // Fill in this object.
+        objs[i] = ListingObject {
+            Key:        obj.Key,
+            Owner:      obj.Owner,
+            Size:       obj.Size,
+            CTime:      obj.CTime,
+            MD5Sum:     obj.MD5Sum,
+        }
+
+        if includeMeta {
+            objs[i].Metadata = obj.Metadata
+            objs[i].Tags = obj.Tags
+        }
+
+        i++
+    }
+
+    // Fill in the metadata wrapping the listing
+    rv := ObjectListing {
+        Bucket:         bucket,
+        Count:          uint64(meta.FetchedRecordsCount),
+        Token:          meta.Bookmark,
+        Objects:        objs,
+    }
+
+    return &rv, nil
+}
+
+func (s *SmartContract) CommitObjectRequest(ctx contractapi.TransactionContextInterface,
+                                            bucket string, key string) error {
+    // XXX: permission check
+
+    sid, _ := ctx.GetStub().CreateCompositeKey("Object", []string{bucket, key})
+    objJSON, err := ctx.GetStub().GetState(sid)
+    if err != nil {
+        return err
+    } else if objJSON == nil {
+        return fmt.Errorf("unknown object")
+    }
+
+    var obj Object
+    err = json.Unmarshal(objJSON, &obj)
+    if err != nil {
+        return err
+    }
+
+    // Remove the staged flag if it is set.
+    if (obj.Flags & ObjectFlag_Staged) != 0 {
+        obj.Flags &= ^ObjectFlag_Staged
+        objJSON, err = json.Marshal(obj)
+        if err != nil {
+            return err
+        }
+
+        err = ctx.GetStub().PutState(sid, objJSON)
+    }
+
+    return err
 }
 
