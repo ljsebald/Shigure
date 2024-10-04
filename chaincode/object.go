@@ -420,7 +420,7 @@ func (s *SmartContract) QueryObjects(ctx contractapi.TransactionContextInterface
     }
 
     // Build up the metadata portion of the query...
-    var querymap map[string]string
+    querymap := make(map[string]string)
     querymap["type"] = "Object"
     querymap["bucket"] = bucket
 
@@ -705,7 +705,7 @@ func (s *SmartContract) QueryDeleteRecords(ctx contractapi.TransactionContextInt
     }
 
     // Build up the metadata portion of the query...
-    var querymap map[string]string
+    querymap := make(map[string]string)
     querymap["type"] = "DeletedObject"
     querymap["bucket"] = bucket
 
