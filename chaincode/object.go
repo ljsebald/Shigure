@@ -67,6 +67,36 @@ func (s *SmartContract) GetObjectByPath(ctx contractapi.TransactionContextInterf
     return &obj, nil
 }
 
+func (s *SmartContract) GetDeleteRecord(ctx contractapi.TransactionContextInterface,
+                                        bucket string,
+                                        id string) (*DeleteRecord, error) {
+    myuser, err := s.GetMyUser(ctx)
+    if err != nil {
+        return nil, err
+    }
+
+    sid, _ := ctx.GetStub().CreateCompositeKey("DeletedObject", []string{bucket, id})
+    objJSON, err := ctx.GetStub().GetState(sid)
+    if err != nil {
+        return nil, err
+    } else if objJSON == nil {
+        return nil, fmt.Errorf("unknown delete record")
+    }
+
+    var obj DeleteRecord
+    err = json.Unmarshal(objJSON, &obj)
+    if err != nil {
+        return nil, err
+    }
+
+    // Only allow owners to see delete records
+    if obj.Owner != myuser.ID {
+        return nil, fmt.Errorf("permission denied")
+    }
+
+    return &obj, nil
+}
+
 func (s *SmartContract) CreateEmptyObject(ctx contractapi.TransactionContextInterface,
                                           bucket string, key string,
                                           metadata map[string]string,
@@ -198,7 +228,7 @@ func (s *SmartContract) createobject(ctx contractapi.TransactionContextInterface
     for k, v := range metadata {
         idx, _ := s.getindex(ctx, myuser.ID, k, bucket)
         if idx != nil {
-            s.addobjecttoindex(ctx, idx.ID, v, obj.ID)
+            s.addobjecttoindex(ctx, idx.ID, v, key)
         }
     }
 
@@ -267,7 +297,7 @@ func (s *SmartContract) RemoveObject(ctx contractapi.TransactionContextInterface
         return "", err
     }
 
-    sidDr, _ := ctx.GetStub().CreateCompositeKey("DeletedObject", []string{obj.ID})
+    sidDr, _ := ctx.GetStub().CreateCompositeKey("DeletedObject", []string{bucket, obj.ID})
     err = ctx.GetStub().PutState(sidDr, drJSON)
     if err != nil {
         return "", fmt.Errorf("failed to put delete record to world state. %v", err)
@@ -280,6 +310,14 @@ func (s *SmartContract) RemoveObject(ctx contractapi.TransactionContextInterface
         return "", fmt.Errorf("failed to delete from world state. %v", err)
     }
 
+    // Remove the object from any indexes it is in.
+    for k, v := range obj.Metadata {
+        idx, _ := s.getindex(ctx, myuser.ID, k, bucket)
+        if idx != nil {
+            s.removeobjectfromindex(ctx, idx.ID, v, key)
+        }
+    }
+
     // If the Index File flag is set, there was no data for this file on the
     // backing store, so we're done already.
     if indexFile {
@@ -288,6 +326,32 @@ func (s *SmartContract) RemoveObject(ctx contractapi.TransactionContextInterface
 
     // TODO: Generate a presigned url to delete the file.
     return "true", nil
+}
+
+func (s *SmartContract) RemoveDeleteRecord(ctx contractapi.TransactionContextInterface,
+                                           bucket string, id string) (bool, error) {
+    myuser, err := s.GetMyUser(ctx)
+    if err != nil {
+        return false, err
+    }
+
+    obj, err := s.GetDeleteRecord(ctx, bucket, id)
+    if err != nil {
+        return false, err
+    }
+
+    // Only allow an owner to clear a delete record
+    if obj.Owner != myuser.ID {
+        return false, fmt.Errorf("permission denied")
+    }
+
+    sidDr, _ := ctx.GetStub().CreateCompositeKey("DeletedObject", []string{bucket, id})
+    err = ctx.GetStub().DelState(sidDr)
+    if err != nil {
+        return false, fmt.Errorf("failed to remove delete record from world state. %v", err)
+    }
+
+    return true, nil
 }
 
 func (s *SmartContract) isbucketempty(ctx contractapi.TransactionContextInterface,
@@ -373,6 +437,7 @@ func (s *SmartContract) ListObjects(ctx contractapi.TransactionContextInterface,
         if includeMeta {
             objs[i].Metadata = obj.Metadata
             objs[i].Tags = obj.Tags
+            objs[i].ID = obj.ID
         }
 
         i++
@@ -482,6 +547,7 @@ func (s *SmartContract) QueryObjects(ctx contractapi.TransactionContextInterface
         if includeMeta {
             objs[i].Metadata = obj.Metadata
             objs[i].Tags = obj.Tags
+            objs[i].ID = obj.ID
         }
 
         i++
@@ -545,7 +611,6 @@ func (s *SmartContract) QueryObjectsByIndex(ctx contractapi.TransactionContextIn
     }
 
     objs := make([]ListingObject, 0)
-    i := 0
 
     for iter.HasNext() {
         resp, err := iter.Next()
@@ -553,14 +618,18 @@ func (s *SmartContract) QueryObjectsByIndex(ctx contractapi.TransactionContextIn
             return nil, err
         }
 
-        var obj Object
-        err = json.Unmarshal(resp.Value, &obj)
+        _, parts, err := ctx.GetStub().SplitCompositeKey(resp.Key)
+        if err != nil {
+            return nil, err
+        }
+
+        obj, err := s.GetObjectByPath(ctx, bucket, parts[2])
         if err != nil {
             return nil, err
         }
 
         // Fill in this object.
-        objs[i] = ListingObject {
+        lobj := ListingObject {
             Key:        obj.Key,
             Owner:      obj.Owner,
             Size:       obj.Size,
@@ -569,11 +638,12 @@ func (s *SmartContract) QueryObjectsByIndex(ctx contractapi.TransactionContextIn
         }
 
         if includeMeta {
-            objs[i].Metadata = obj.Metadata
-            objs[i].Tags = obj.Tags
+            lobj.Metadata = obj.Metadata
+            lobj.Tags = obj.Tags
+            lobj.ID = obj.ID
         }
 
-        i++
+        objs = append(objs, lobj)
     }
 
     // Fill in the metadata wrapping the listing
@@ -658,6 +728,7 @@ func (s *SmartContract) ListDeletedObjects(ctx contractapi.TransactionContextInt
         if includeMeta {
             objs[i].Metadata = obj.Metadata
             objs[i].Tags = obj.Tags
+            objs[i].ID = obj.ID
         }
 
         i++
@@ -767,6 +838,7 @@ func (s *SmartContract) QueryDeleteRecords(ctx contractapi.TransactionContextInt
         if includeMeta {
             objs[i].Metadata = obj.Metadata
             objs[i].Tags = obj.Tags
+            objs[i].ID = obj.ID
         }
 
         i++

@@ -143,6 +143,7 @@ type ListingObject struct {
     MD5Sum          [16]byte            `json:"md5sum"`
     Metadata        map[string]string   `json:"metadata"`
     Tags            []string            `json:"tags"`
+    ID              string              `json:"id"`
 }
 
 type ObjectListing struct {
