@@ -5,6 +5,7 @@
 package chaincode
 
 import (
+    "context"
     "encoding/json"
     "fmt"
     "strings"
@@ -12,6 +13,7 @@ import (
 
     "github.com/hyperledger/fabric-contract-api-go/v2/contractapi"
     "github.com/google/uuid"
+    "github.com/minio/minio-go/v7"
 )
 
 func (s *SmartContract) initobjects(ctx contractapi.TransactionContextInterface) error {
@@ -103,8 +105,7 @@ func (s *SmartContract) CreateEmptyObject(ctx contractapi.TransactionContextInte
                                           tags []string,
                                           aclTemplate string,
                                           overwrite bool) (bool, error) {
-    nullmd5 := [16]byte { 0xd4, 0x1d, 0x8c, 0xd9, 0x8f, 0x00, 0xb2, 0x04,
-                          0xe9, 0x80, 0x09, 0x98, 0xec, 0xf8, 0x42, 0x7e }
+    nullmd5 := "d41d8cd98f00b204e9800998ecf8427e"
     err := s.createobject(ctx, bucket, key, 0, nullmd5, metadata, tags,
                           aclTemplate, ObjectFlag_IndexOnly, overwrite)
     return err == nil, err
@@ -112,7 +113,7 @@ func (s *SmartContract) CreateEmptyObject(ctx contractapi.TransactionContextInte
 
 func (s *SmartContract) CreateObject(ctx contractapi.TransactionContextInterface,
                                      bucket string, key string, size uint64,
-                                     md5sum [16]byte,
+                                     md5sum string,
                                      metadata map[string]string,
                                      tags []string,
                                      aclTemplate string,
@@ -124,13 +125,18 @@ func (s *SmartContract) CreateObject(ctx contractapi.TransactionContextInterface
         return "", err
     }
 
-    // TODO: presigned PUT url.
-    return "true", err
+    ps, err := s.S3client.PresignedPutObject(context.TODO(), bucket, key,
+                                             time.Duration(10) * time.Second)
+    if err != nil {
+        return "", err
+    }
+
+    return ps.String(), err
 }
 
 func (s *SmartContract) createobject(ctx contractapi.TransactionContextInterface,
                                      bucket string, key string, size uint64,
-                                     md5sum [16]byte,
+                                     md5sum string,
                                      metadata map[string]string,
                                      tags []string,
                                      aclTemplate string, flags uint64,
@@ -332,7 +338,11 @@ func (s *SmartContract) RemoveObject(ctx contractapi.TransactionContextInterface
         return "true", nil
     }
 
-    // TODO: Generate a presigned url to delete the file.
+    err = s.S3client.RemoveObject(context.TODO(), bucket, key, minio.RemoveObjectOptions{})
+    if err != nil {
+        return "", nil
+    }
+
     return "true", nil
 }
 

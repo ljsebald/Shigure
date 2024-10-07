@@ -6,10 +6,12 @@ package chaincode
 
 import (
     "github.com/hyperledger/fabric-contract-api-go/v2/contractapi"
+    "github.com/minio/minio-go/v7"
 )
 
 type SmartContract struct {
     contractapi.Contract
+    S3client *minio.Client
 }
 
 // System Permissions
@@ -110,7 +112,7 @@ type Object struct {
     Key             string              `json:"key"`
     Owner           string              `json:"owner"`
     Permissions     ACL                 `json:"perms"`
-    MD5Sum          [16]byte            `json:"md5sum"`
+    MD5Sum          string              `json:"md5sum"`
     Size            uint64              `json:"size"`
     CTime           int64               `json:"ctime"`
     Metadata        map[string]string   `json:"metadata"`
@@ -126,7 +128,7 @@ type DeleteRecord struct {
     Owner           string              `json:"owner"`
     Deleter         string              `json:"deleter"`
     Permissions     ACL                 `json:"perms"`
-    MD5Sum          [16]byte            `json:"md5sum"`
+    MD5Sum          string              `json:"md5sum"`
     Size            uint64              `json:"size"`
     CTime           int64               `json:"ctime"`
     DTime           int64               `json:"dtime"`
@@ -140,7 +142,7 @@ type ListingObject struct {
     Owner           string              `json:"owner"`
     Size            uint64              `json:"size"`
     CTime           int64               `json:"ctime"`
-    MD5Sum          [16]byte            `json:"md5sum"`
+    MD5Sum          string              `json:"md5sum"`
     Metadata        map[string]string   `json:"metadata"`
     Tags            []string            `json:"tags"`
     ID              string              `json:"id"`
