@@ -8,6 +8,7 @@ import (
     "context"
     "encoding/json"
     "fmt"
+    "net/url"
     "strings"
     "time"
 
@@ -67,6 +68,65 @@ func (s *SmartContract) GetObjectByPath(ctx contractapi.TransactionContextInterf
     }
 
     return &obj, nil
+}
+
+func (s *SmartContract) ReadObject(ctx contractapi.TransactionContextInterface,
+                                   bucket string, key string) (string, error) {
+    myuser, err := s.GetMyUser(ctx)
+    if err != nil {
+        return "", err
+    }
+
+    sid, _ := ctx.GetStub().CreateCompositeKey("Object", []string{bucket, key})
+    objJSON, err := ctx.GetStub().GetState(sid)
+    if err != nil {
+        return "", err
+    } else if objJSON == nil {
+        return "", fmt.Errorf("unknown object")
+    }
+
+    var obj Object
+    err = json.Unmarshal(objJSON, &obj)
+    if err != nil {
+        return "", err
+    }
+
+    // Test if the ACL says this is ok if this file isn't owned by the user.
+    if obj.Owner != myuser.ID {
+        ok := false
+
+        // If the object has an ACL, it controls the access. Otherwise, check
+        // the bucket's ACL.
+        if len(obj.Permissions) != 0 {
+            ok = s.testaclaccess(ctx, obj.Permissions, myuser.UID, bucket,
+                                 ACL_AccessType_Read)
+        }
+
+        if !ok {
+            bkt, err := s.GetBucket(ctx, bucket)
+            if err != nil {
+                return "", err
+            }
+
+            if len(bkt.Permissions) != 0 {
+                ok = s.testaclaccess(ctx, bkt.Permissions, myuser.UID, bucket,
+                                     ACL_AccessType_Read)
+            }
+        }
+
+        if !ok {
+            return "", fmt.Errorf("permission denied")
+        }
+    }
+
+    ps, err := s.S3client.PresignedGetObject(context.TODO(), bucket, key,
+                                             time.Duration(10) * time.Second,
+                                             url.Values{})
+    if err != nil {
+        return "", err
+    }
+
+    return ps.String(), nil
 }
 
 func (s *SmartContract) GetDeleteRecord(ctx contractapi.TransactionContextInterface,
